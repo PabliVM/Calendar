@@ -52,13 +52,18 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
 .day-cell.today .day-number{background:var(--accent);color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:600}
 .day-number{font-size:12px;font-weight:500;color:var(--text);line-height:1;margin-bottom:3px;display:flex;align-items:center;justify-content:center;width:22px;height:22px}
 .day-events{display:flex;flex-direction:column;gap:1.5px}
-.event-pill{display:flex;align-items:center;gap:3px;padding:1.5px 4px;border-radius:4px;font-size:9.5px;font-weight:500;line-height:1.3;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;cursor:pointer}
-.event-pill.multiday-start{border-radius:4px 0 0 4px;margin-right:0}
-.event-pill.multiday-mid{border-radius:0;opacity:.85;margin-right:0}
-.event-pill.multiday-end{border-radius:0 4px 4px 0;opacity:.85}
+.event-pill{display:flex;align-items:center;gap:3px;padding:1.5px 4px;border-radius:4px;font-size:9.5px;font-weight:500;line-height:1.3;color:white;white-space:nowrap;overflow:hidden;cursor:pointer;position:relative;z-index:1}
+.event-pill.multiday-start{border-radius:4px 0 0 4px}
+.event-pill.multiday-mid{border-radius:0;padding-left:2px;padding-right:2px}
+.event-pill.multiday-end{border-radius:0 4px 4px 0;padding-left:2px}
+/* Spanning pills overflow into adjacent cells */
+.event-pill[data-span]{position:absolute;left:0;right:0;z-index:2;pointer-events:auto}
 .pill-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.7);flex-shrink:0}
 .pill-warn{font-size:8px;flex-shrink:0}
-.event-pill-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.event-pill-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+/* Row-level multiday bar container */
+.multiday-row{position:relative;height:14px;margin-bottom:1.5px}
+.multiday-bar{position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:9.5px;font-weight:500;color:white;cursor:pointer;overflow:hidden;white-space:nowrap;padding:0 5px;z-index:2}
 .more-link{font-size:9px;color:var(--accent);font-weight:600;padding:1px 4px;cursor:pointer}
 .conflict-badge{position:absolute;top:3px;right:3px;font-size:9px}
 
@@ -280,7 +285,7 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
 <!-- Category creator -->
 <div class="modal-overlay hidden" id="catModal">
   <div class="confirm-sheet" style="padding:24px 20px">
-    <h3 style="font-size:17px;font-weight:600;margin:0 0 16px;color:var(--text)">Nueva categoría</h3>
+    <h3 id="catModalTitle" style="font-size:17px;font-weight:600;margin:0 0 16px;color:var(--text)">Nueva categoría</h3>
     <div class="field-group" style="margin:0 0 12px">
       <input type="text" class="field-input" id="catNameInput" placeholder="Nombre"/>
     </div>
@@ -289,45 +294,58 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
       <button class="confirm-cancel" id="catCancel">Cancelar</button>
       <button class="confirm-delete" id="catSave" style="background:var(--accent)">Guardar</button>
     </div>
+    <button id="catDeleteBtn" style="display:none;width:100%;margin-top:10px;padding:13px;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#FF3B30;background:var(--surface2);cursor:pointer;font-family:inherit">Eliminar categoría</button>
   </div>
 </div>
 
-<script>
-// ── Storage layer (localStorage — misma interfaz que Firebase) ──
-const EVENTS_KEY = "cal_events";
-const CATS_KEY   = "cal_categories";
-const listeners  = { events: [], categories: [] };
+<script type="module">
+// ── Firebase storage layer ──────────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getFirestore, collection, doc,
+  addDoc, updateDoc, deleteDoc,
+  onSnapshot, serverTimestamp,
+  query, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-function readStore(key) {
-  try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; }
-}
-function writeStore(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-function notify(type) {
-  const data = readStore(type === "events" ? EVENTS_KEY : CATS_KEY);
-  listeners[type].forEach(cb => cb(data));
+async function deleteCategory(id) {
+  return deleteDoc(doc(db, "categories", id));
 }
 
-function subscribeEvents(cb) { listeners.events.push(cb); cb(readStore(EVENTS_KEY)); }
-function subscribeCategories(cb) { listeners.categories.push(cb); cb(readStore(CATS_KEY)); }
+const firebaseConfig = {
+  apiKey:            "AIzaSyBmWUde0XBMo4EBCBbQLlWWMn8ilHyx_L4",
+  authDomain:        "calendar-78c7c.firebaseapp.com",
+  projectId:         "calendar-78c7c",
+  storageBucket:     "calendar-78c7c.firebasestorage.app",
+  messagingSenderId: "795817842509",
+  appId:             "1:795817842509:web:e61e79362f98a9f1e28904"
+};
+// ────────────────────────────────────────────────────────────
 
+const _app = initializeApp(firebaseConfig);
+const db   = getFirestore(_app);
+
+function subscribeEvents(cb) {
+  const q = query(collection(db, "events"), orderBy("date"), orderBy("createdAt"));
+  return onSnapshot(q, snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+}
+function subscribeCategories(cb) {
+  return onSnapshot(collection(db, "categories"), snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+}
 async function addEvent(data) {
-  const ev = { ...data, id: uid(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  const evs = readStore(EVENTS_KEY); evs.push(ev); writeStore(EVENTS_KEY, evs); notify("events"); return ev;
+  return addDoc(collection(db, "events"), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 }
 async function updateEvent(id, data) {
-  const evs = readStore(EVENTS_KEY);
-  const i = evs.findIndex(e => e.id === id);
-  if (i === -1) throw new Error("not found");
-  evs[i] = { ...evs[i], ...data, updatedAt: new Date().toISOString() };
-  writeStore(EVENTS_KEY, evs); notify("events");
+  return updateDoc(doc(db, "events", id), { ...data, updatedAt: serverTimestamp() });
 }
 async function deleteEvent(id) {
-  writeStore(EVENTS_KEY, readStore(EVENTS_KEY).filter(e => e.id !== id)); notify("events");
+  return deleteDoc(doc(db, "events", id));
 }
 async function addCategory(data) {
-  const cat = { ...data, id: uid() };
-  const cats = readStore(CATS_KEY); cats.push(cat); writeStore(CATS_KEY, cats); notify("categories"); return cat;
+  return addDoc(collection(db, "categories"), data);
+}
+async function updateCategory(id, data) {
+  return updateDoc(doc(db, "categories", id), data);
 }
 
 // ── App constants ──
@@ -396,7 +414,10 @@ function renderMonthly() {
   const daysInM  = new Date(y, m+1, 0).getDate();
   const daysInPrev = new Date(y, m, 0).getDate();
   const total    = Math.ceil((offset + daysInM) / 7) * 7;
+  const weeks    = total / 7;
 
+  // Build date list for all cells
+  const allDates = [];
   for (let i = 0; i < total; i++) {
     let dateStr, isOther = false;
     if (i < offset) {
@@ -408,7 +429,94 @@ function renderMonthly() {
       dateStr = formatDate(new Date(m===11?y+1:y, m===11?0:m+1, i - offset - daysInM + 1));
       isOther = true;
     }
-    grid.appendChild(buildDayCell(dateStr, isOther));
+    allDates.push({ dateStr, isOther });
+  }
+
+  // Build cells
+  const cells = allDates.map(({ dateStr, isOther }) => buildDayCell(dateStr, isOther));
+  cells.forEach(c => grid.appendChild(c));
+
+  // After cells are in the DOM, overlay multiday bars per row
+  requestAnimationFrame(() => renderMultidayBars(grid, allDates, cells, weeks));
+}
+
+function renderMultidayBars(grid, allDates, cells, weeks) {
+  // Collect multiday events
+  const multiday = state.events.filter(ev => isMultiDay(ev));
+
+  for (let week = 0; week < weeks; week++) {
+    const rowStart = week * 7;
+    const rowDates = allDates.slice(rowStart, rowStart + 7).map(d => d.dateStr);
+    const rowCells = cells.slice(rowStart, rowStart + 7);
+
+    // Which multiday events are visible in this row?
+    const rowEvents = multiday.filter(ev =>
+      ev.date <= rowDates[6] && ev.endDate >= rowDates[0]
+    );
+
+    if (rowEvents.length === 0) continue;
+
+    // Sort by start date so they stack consistently
+    rowEvents.sort((a, b) => a.date.localeCompare(b.date));
+
+    // Lane assignment (simple greedy)
+    const lanes = [];
+    rowEvents.forEach(ev => {
+      const startCol = Math.max(0, rowDates.indexOf(ev.date));
+      const endCol   = rowDates.indexOf(ev.endDate);
+      const visStart = ev.date < rowDates[0] ? 0 : startCol;
+      const visEnd   = ev.endDate > rowDates[6] ? 6 : (endCol === -1 ? 6 : endCol);
+
+      let lane = lanes.findIndex(l => l <= visStart);
+      if (lane === -1) { lane = lanes.length; }
+      lanes[lane] = visEnd + 1;
+
+      // Get pixel positions from cells
+      const startCell = rowCells[visStart];
+      const endCell   = rowCells[visEnd];
+      if (!startCell || !endCell) return;
+
+      const gridRect  = grid.getBoundingClientRect();
+      const startRect = startCell.getBoundingClientRect();
+      const endRect   = endCell.getBoundingClientRect();
+
+      const cat   = getCat(ev.category);
+      const color = cat ? cat.color : "#8E8E93";
+      const LANE_H = 14;
+      const LANE_GAP = 2;
+      const TOP_OFFSET = 22 + 4; // day number height + gap
+
+      const bar = document.createElement("div");
+      bar.className = "multiday-bar";
+      bar.style.cssText = `
+        left:${startRect.left - gridRect.left + (visStart === 0 ? 0 : 1)}px;
+        width:${endRect.right - startRect.left - (visStart === 0 ? 0 : 1) - 1}px;
+        top:${TOP_OFFSET + lane * (LANE_H + LANE_GAP)}px;
+        height:${LANE_H}px;
+        background:${color};
+        border-radius:${ev.date >= rowDates[0] ? '4px' : '0'} ${ev.endDate <= rowDates[6] ? '4px' : '0'} ${ev.endDate <= rowDates[6] ? '4px' : '0'} ${ev.date >= rowDates[0] ? '4px' : '0'};
+      `;
+
+      // Show title only at start of bar (first visible day in row)
+      const showTitle = ev.date >= rowDates[0] ? true : visStart === 0;
+      if (showTitle) {
+        bar.textContent = ev.title;
+      }
+
+      bar.addEventListener("click", e => { e.stopPropagation(); openEventModal(ev); });
+      grid.style.position = "relative";
+      grid.appendChild(bar);
+
+      // Hide the individual pills for this event in these cells (they are now replaced by the bar)
+      rowDates.forEach((d, ci) => {
+        if (ci >= visStart && ci <= visEnd) {
+          const cell = rowCells[ci];
+          cell.querySelectorAll(".event-pill").forEach(p => {
+            if (p.dataset.evid === ev.id) p.style.display = "none";
+          });
+        }
+      });
+    });
   }
 }
 
@@ -430,6 +538,7 @@ function buildDayCell(dateStr, isOther) {
 
   sorted.slice(0, 3).forEach(ev => {
     const pill = buildPill(ev, conflicts.has(ev.id), dateStr);
+    pill.dataset.evid = ev.id;
     pill.addEventListener("click", e => { e.stopPropagation(); openEventModal(ev); });
     ec.appendChild(pill);
   });
@@ -606,12 +715,27 @@ function renderCategoryPills(selectedId) {
   const c = document.getElementById("categoryPills");
   c.innerHTML = "";
   state.categories.forEach(cat => {
+    const wrap = document.createElement("div");
+    wrap.style.position = "relative";
+    wrap.style.display = "inline-flex";
+    wrap.style.alignItems = "center";
+    wrap.style.gap = "2px";
+
     const pill = document.createElement("div");
     pill.className = "cat-pill" + (cat.id === selectedId ? " selected" : "");
     pill.style.background = cat.color;
     pill.textContent = cat.name;
     pill.addEventListener("click", () => { state.selectedCat = cat.id; renderCategoryPills(cat.id); });
-    c.appendChild(pill);
+
+    // Small edit button next to each pill
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "···";
+    editBtn.style.cssText = "border:none;background:none;color:var(--text2);font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;";
+    editBtn.addEventListener("click", (e) => { e.stopPropagation(); openEditCatModal(cat); });
+
+    wrap.appendChild(pill);
+    wrap.appendChild(editBtn);
+    c.appendChild(wrap);
   });
 }
 
@@ -711,13 +835,30 @@ async function confirmDeleteEvent() {
 }
 
 // ── Category modal ──
+let editingCatId = null;
+
 function openCatModal() {
+  editingCatId = null;
   state.selectedColor = PALETTE[5];
   document.getElementById("catNameInput").value = "";
+  document.getElementById("catModalTitle").textContent = "Nueva categoría";
+  document.getElementById("catDeleteBtn").style.display = "none";
   buildColorPicker();
   document.getElementById("catModal").classList.remove("hidden");
 }
-function closeCatModal() { document.getElementById("catModal").classList.add("hidden"); }
+
+function openEditCatModal(cat) {
+  editingCatId = cat.id;
+  state.selectedColor = cat.color;
+  document.getElementById("catNameInput").value = cat.name;
+  document.getElementById("catModalTitle").textContent = "Editar categoría";
+  document.getElementById("catDeleteBtn").style.display = "block";
+  buildColorPicker();
+  document.getElementById("catModal").classList.remove("hidden");
+}
+
+function closeCatModal() { document.getElementById("catModal").classList.add("hidden"); editingCatId = null; }
+
 function buildColorPicker() {
   const cp = document.getElementById("colorPicker"); cp.innerHTML = "";
   PALETTE.forEach(color => {
@@ -728,11 +869,25 @@ function buildColorPicker() {
     cp.appendChild(sw);
   });
 }
+
 async function saveCat() {
   const name = document.getElementById("catNameInput").value.trim();
   if (!name) { alert("El nombre es obligatorio."); return; }
-  try { await addCategory({ name, color: state.selectedColor }); closeCatModal(); }
-  catch(err) { alert("Error al crear categoría."); }
+  try {
+    if (editingCatId) {
+      await updateCategory(editingCatId, { name, color: state.selectedColor });
+    } else {
+      await addCategory({ name, color: state.selectedColor });
+    }
+    closeCatModal();
+  } catch(err) { alert("Error al guardar categoría."); }
+}
+
+async function deleteCat() {
+  if (!editingCatId) return;
+  if (!confirm("¿Eliminar esta categoría? Los eventos no se borrarán.")) return;
+  try { await deleteCategory(editingCatId); closeCatModal(); }
+  catch(err) { alert("Error al eliminar."); }
 }
 
 // ── Navigation ──
@@ -782,10 +937,15 @@ document.getElementById("deleteBtn").addEventListener("click", openConfirmDelete
 document.getElementById("confirmCancel").addEventListener("click", closeConfirmDelete);
 document.getElementById("confirmDelete").addEventListener("click", confirmDeleteEvent);
 document.getElementById("fieldAllDay").addEventListener("change", e => toggleTimeFields(!e.target.checked));
+document.getElementById("fieldDate").addEventListener("change", e => {
+  const endDate = document.getElementById("fieldEndDate");
+  if (!endDate.value || endDate.value < e.target.value) endDate.value = e.target.value;
+});
 document.getElementById("dayModalClose").addEventListener("click", closeDayModal);
 document.getElementById("addCategoryBtn").addEventListener("click", openCatModal);
 document.getElementById("catCancel").addEventListener("click", closeCatModal);
 document.getElementById("catSave").addEventListener("click", saveCat);
+document.getElementById("catDeleteBtn").addEventListener("click", deleteCat);
 
 ["eventModal","confirmModal","dayModal","catModal"].forEach(id => {
   const el = document.getElementById(id);
