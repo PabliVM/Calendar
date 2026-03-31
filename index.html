@@ -48,7 +48,7 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
 
 /* Monthly grid */
 .month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:0;padding:0 0 80px;border-top:.5px solid var(--sep)}
-.day-cell{min-height:88px;padding:6px 4px 4px;border-right:.5px solid var(--sep);border-bottom:.5px solid var(--sep);position:relative;cursor:pointer;background:var(--surface);overflow:visible}
+.day-cell{min-height:96px;padding:6px 4px 4px;border-right:.5px solid var(--sep);border-bottom:.5px solid var(--sep);position:relative;cursor:pointer;background:var(--surface);overflow:visible}
 .day-cell:active{background:var(--surface2)}
 .day-cell:nth-child(7n){border-right:none}
 .day-cell.other-month{background:#FAFAFA}
@@ -489,7 +489,7 @@ function renderMonthly() {
 }
 
 function renderMultidayBars(grid, allDates, cells, weeks) {
-  const LANE_H = 14, LANE_GAP = 2, TOP_OFFSET = 26;
+  const LANE_H = 16, LANE_GAP = 2, TOP_OFFSET = 24;
   const multiday = state.events.filter(ev => isMultiDay(ev));
 
   for (let week = 0; week < weeks; week++) {
@@ -506,12 +506,15 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
 
     rowEvents.sort((a, b) => a.date.localeCompare(b.date));
 
+    // lanes[i] = columna visEnd+1 hasta donde llega la barra en ese carril
     const lanes = [];
+
     rowEvents.forEach(ev => {
       const visStart = ev.date < rowFirst ? 0 : rowDates.indexOf(ev.date);
       const visEnd   = ev.endDate > rowLast ? 6 : rowDates.indexOf(ev.endDate);
       if (visStart === -1 || visEnd === -1) return;
 
+      // Buscar carril libre
       let lane = lanes.findIndex(l => l <= visStart);
       if (lane === -1) lane = lanes.length;
       lanes[lane] = visEnd + 1;
@@ -520,15 +523,13 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
       const color = cat ? cat.color : "#8E8E93";
       const startsInRow = ev.date >= rowFirst;
       const endsInRow   = ev.endDate <= rowLast;
+      const spanCols    = visEnd - visStart + 1;
 
-      // Anclar la barra dentro de rowCells[visStart] usando % del ancho de celda
-      // Una celda = 1/7 del grid, así que para spanning N celdas el width = N*100%
       const anchor = rowCells[visStart];
       anchor.style.overflow = 'visible';
 
       const bar = document.createElement("div");
       bar.className = "multiday-bar";
-      const spanCols = visEnd - visStart + 1;
       bar.style.cssText = [
         `position:absolute`,
         `left:1px`,
@@ -554,7 +555,7 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
       bar.addEventListener("click", e => { e.stopPropagation(); openDetailModal(ev); });
       anchor.appendChild(bar);
 
-      // Ocultar pills individuales en las celdas cubiertas
+      // Ocultar pills individuales en celdas cubiertas por la barra
       rowDates.forEach((d, ci) => {
         if (ci >= visStart && ci <= visEnd) {
           rowCells[ci].querySelectorAll(".event-pill").forEach(p => {
