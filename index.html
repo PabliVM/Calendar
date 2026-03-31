@@ -23,9 +23,9 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
 
 /* Header */
 .app-header{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.88);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:.5px solid var(--sep);padding-top:env(safe-area-inset-top,0px)}
-.app-title-bar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 10px}
+.app-title-bar{display:flex;align-items:center;justify-content:space-between;padding:20px 20px 12px}
 .app-title{font-size:26px;font-weight:800;letter-spacing:-.6px;color:var(--text);line-height:1}
-.app-avatar{width:72px;height:72px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:white;overflow:hidden;flex-shrink:0;cursor:pointer}
+.app-avatar{width:96px;height:96px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:white;overflow:hidden;flex-shrink:0;cursor:pointer}
 .app-avatar img{width:100%;height:100%;object-fit:cover}
 .header-inner{padding:8px 20px 8px}
 .header-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
@@ -453,6 +453,10 @@ function renderMonthly() {
 
   const { currentYear: y, currentMonth: m } = state;
   const grid = document.getElementById("monthGrid");
+
+  // Cancelar cualquier rAF pendiente para evitar barras de renders anteriores
+  if (grid._rafId) { cancelAnimationFrame(grid._rafId); grid._rafId = null; }
+
   grid.innerHTML = "";
 
   const firstDay = new Date(y, m, 1).getDay();
@@ -480,7 +484,12 @@ function renderMonthly() {
   const cells = allDates.map(({ dateStr, isOther }) => buildDayCell(dateStr, isOther));
   cells.forEach(c => grid.appendChild(c));
 
-  requestAnimationFrame(() => renderMultidayBars(grid, allDates, cells, weeks));
+  // Limpiar barras residuales y lanzar nuevo rAF guardando su ID
+  grid.querySelectorAll(".multiday-bar").forEach(b => b.remove());
+  grid._rafId = requestAnimationFrame(() => {
+    grid._rafId = null;
+    renderMultidayBars(grid, allDates, cells, weeks);
+  });
 }
 
 function renderMultidayBars(grid, allDates, cells, weeks) {
@@ -838,8 +847,7 @@ function openDetailModal(ev) {
     openEditForm(ev);
   };
   document.getElementById("detailDelete").onclick = () => {
-    state.editingId = ev.id;
-    openConfirmDelete();
+    openConfirmDeleteForId(ev.id);
   };
 
   document.getElementById("detailModal").classList.remove("hidden");
@@ -928,12 +936,24 @@ async function saveEvent() {
   } catch (err) { alert("Error al guardar."); }
 }
 
-function openConfirmDelete()  { document.getElementById("confirmModal").classList.remove("hidden"); }
-function closeConfirmDelete() { document.getElementById("confirmModal").classList.add("hidden"); }
+let _pendingDeleteId = null;
+function openConfirmDeleteForId(id) {
+  _pendingDeleteId = id;
+  document.getElementById("confirmModal").classList.remove("hidden");
+}
+function openConfirmDelete() {
+  _pendingDeleteId = state.editingId;
+  document.getElementById("confirmModal").classList.remove("hidden");
+}
+function closeConfirmDelete() {
+  document.getElementById("confirmModal").classList.add("hidden");
+  _pendingDeleteId = null;
+}
 async function confirmDeleteEvent() {
-  if (!state.editingId) return;
+  if (!_pendingDeleteId) return;
+  const id = _pendingDeleteId;
   try {
-    await deleteEvent(state.editingId);
+    await deleteEvent(id);
     closeConfirmDelete();
     closeDetailModal();
     closeEventModal();
