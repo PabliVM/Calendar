@@ -305,7 +305,6 @@ import {
   getFirestore, collection, doc,
   addDoc, updateDoc, deleteDoc,
   onSnapshot, serverTimestamp,
-  query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 async function deleteCategory(id) {
@@ -326,7 +325,7 @@ const _app = initializeApp(firebaseConfig);
 const db   = getFirestore(_app);
 
 function subscribeEvents(cb) {
-  const q = query(collection(db, "events"), orderBy("date"), orderBy("createdAt"));
+  const q = collection(db, "events");
   return onSnapshot(q, snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 }
 function subscribeCategories(cb) {
