@@ -153,6 +153,22 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
 .color-swatch{width:32px;height:32px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:border-color .15s,transform .15s}
 .color-swatch.selected{border-color:#1C1C1E;transform:scale(1.15)}
 
+/* Ficha de evento */
+.ev-card-header{display:flex;align-items:flex-start;gap:14px;padding:20px 20px 12px}
+.ev-card-color-bar{width:5px;border-radius:3px;min-height:48px;align-self:stretch;flex-shrink:0;margin-top:2px}
+.ev-card-title{font-size:22px;font-weight:700;color:var(--text);line-height:1.2;flex:1}
+.ev-card-cat{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;font-weight:500;color:var(--text2)}
+.ev-card-cat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ev-card-body{padding:0 20px 4px}
+.ev-card-row{display:flex;align-items:flex-start;gap:14px;padding:13px 0;border-bottom:.5px solid var(--sep)}
+.ev-card-row:last-child{border-bottom:none}
+.ev-card-icon{font-size:17px;width:24px;text-align:center;flex-shrink:0;line-height:1.4}
+.ev-card-text{font-size:15px;color:var(--text);line-height:1.5;flex:1;white-space:pre-wrap}
+.ev-card-text.muted{color:var(--text2)}
+.ev-card-actions{display:flex;gap:10px;padding:14px 20px calc(14px + env(safe-area-inset-bottom,0px))}
+.ev-btn-edit{flex:1;padding:15px;border-radius:14px;font-size:16px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:white}
+.ev-btn-delete{flex:1;padding:15px;border-radius:14px;font-size:16px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:#FFE5E5;color:var(--red)}
+
 ::-webkit-scrollbar{width:0;height:0}
 </style>
 </head>
@@ -287,6 +303,35 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
       <div style="width:60px"></div>
     </div>
     <div class="modal-body" id="dayModalBody"></div>
+  </div>
+</div>
+
+<!-- Ficha de evento (vista detalle) -->
+<div class="modal-overlay hidden" id="detailModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <button class="modal-cancel" id="detailClose">Cerrar</button>
+      <h2 class="modal-title"></h2>
+      <div style="width:60px"></div>
+    </div>
+    <div class="modal-body">
+      <div class="ev-card-header">
+        <div class="ev-card-color-bar" id="detailColorBar"></div>
+        <div style="flex:1;min-width:0">
+          <div class="ev-card-title" id="detailTitle"></div>
+          <div class="ev-card-cat" id="detailCat">
+            <span class="ev-card-cat-dot" id="detailCatDot"></span>
+            <span id="detailCatName"></span>
+          </div>
+        </div>
+      </div>
+      <div class="ev-card-body" id="detailBody"></div>
+    </div>
+    <div class="ev-card-actions">
+      <button class="ev-btn-edit" id="detailEdit">✏️ Editar</button>
+      <button class="ev-btn-delete" id="detailDelete">🗑 Borrar</button>
+    </div>
   </div>
 </div>
 
@@ -439,6 +484,9 @@ function renderMonthly() {
 }
 
 function renderMultidayBars(grid, allDates, cells, weeks) {
+  // Limpiar barras anteriores para evitar duplicados en re-renders
+  grid.querySelectorAll(".multiday-bar").forEach(b => b.remove());
+
   const multiday = state.events.filter(ev => isMultiDay(ev));
 
   for (let week = 0; week < weeks; week++) {
@@ -459,10 +507,19 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
 
     const lanes = [];
     rowEvents.forEach(ev => {
-      const visStart = ev.date < rowFirst ? 0 : rowDates.indexOf(ev.date);
-      const visEnd   = ev.endDate > rowLast ? 6 : rowDates.indexOf(ev.endDate);
-
-      if (visStart === -1 || visEnd === -1) return;
+      let visStart, visEnd;
+      if (ev.date <= rowFirst) {
+        visStart = 0;
+      } else {
+        visStart = rowDates.indexOf(ev.date);
+        if (visStart === -1) return;
+      }
+      if (ev.endDate >= rowLast) {
+        visEnd = 6;
+      } else {
+        visEnd = rowDates.indexOf(ev.endDate);
+        if (visEnd === -1) return;
+      }
 
       let lane = lanes.findIndex(l => l <= visStart);
       if (lane === -1) { lane = lanes.length; }
@@ -497,7 +554,7 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
         bar.textContent = ev.title;
       }
 
-      bar.addEventListener("click", e => { e.stopPropagation(); openEventModal(ev); });
+      bar.addEventListener("click", e => { e.stopPropagation(); openDetailModal(ev); });
       grid.style.position = "relative";
       grid.appendChild(bar);
 
@@ -531,7 +588,7 @@ function buildDayCell(dateStr, isOther) {
   sorted.slice(0, 3).forEach(ev => {
     const pill = buildPill(ev, conflicts.has(ev.id), dateStr);
     pill.dataset.evid = ev.id;
-    pill.addEventListener("click", e => { e.stopPropagation(); openEventModal(ev); });
+    pill.addEventListener("click", e => { e.stopPropagation(); openDetailModal(ev); });
     ec.appendChild(pill);
   });
 
@@ -624,7 +681,7 @@ function renderWeekly() {
         const w = document.createElement("div"); w.className = "week-event-warn"; w.textContent = "⚠️";
         row.appendChild(w);
       }
-      row.addEventListener("click", () => openEventModal(ev));
+      row.addEventListener("click", () => openDetailModal(ev));
       area.appendChild(row);
     });
     block.appendChild(area);
@@ -652,7 +709,7 @@ function openDayModal(dateStr, sorted, conflicts) {
     m.textContent = parts.join(" · ");
     info.appendChild(t); info.appendChild(m);
     item.appendChild(bar); item.appendChild(info);
-    item.addEventListener("click", () => { closeDayModal(); openEventModal(ev); });
+    item.addEventListener("click", () => { closeDayModal(); openDetailModal(ev); });
     body.appendChild(item);
   });
   document.getElementById("dayModal").classList.remove("hidden");
@@ -739,7 +796,72 @@ function openNewEventOnDate(dateStr) {
   document.getElementById("eventModal").classList.remove("hidden");
 }
 
+// Ficha de detalle de evento
+function openDetailModal(ev) {
+  const cat = getCat(ev.category);
+  const color = cat ? cat.color : "#8E8E93";
+
+  document.getElementById("detailColorBar").style.background = color;
+  document.getElementById("detailTitle").textContent = ev.title || "";
+  document.getElementById("detailCatDot").style.background = color;
+  document.getElementById("detailCatName").textContent = cat ? cat.name : "";
+  document.getElementById("detailCat").style.display = cat ? "inline-flex" : "none";
+
+  const body = document.getElementById("detailBody");
+  body.innerHTML = "";
+
+  // Fechas / horas
+  let fechaTexto = "";
+  if (isMultiDay(ev)) {
+    const d1 = parseDate(ev.date), d2 = parseDate(ev.endDate);
+    fechaTexto = `${d1.getDate()} ${MONTHS_ES[d1.getMonth()]} → ${d2.getDate()} ${MONTHS_ES[d2.getMonth()]} ${d2.getFullYear()}`;
+  } else {
+    const d = parseDate(ev.date);
+    fechaTexto = `${d.getDate()} ${MONTHS_ES[d.getMonth()]} ${d.getFullYear()}`;
+  }
+  addDetailRow(body, "📅", fechaTexto);
+
+  if (!ev.allDay && ev.startTime) {
+    const horaTexto = ev.endTime ? `${ev.startTime} – ${ev.endTime}` : ev.startTime;
+    addDetailRow(body, "🕐", horaTexto);
+  } else if (ev.allDay) {
+    addDetailRow(body, "🕐", "Todo el día", true);
+  }
+
+  if (ev.description) addDetailRow(body, "📝", ev.description);
+  if (ev.location)    addDetailRow(body, "📍", ev.location);
+  if (ev.notes)       addDetailRow(body, "💬", ev.notes);
+
+  // Botones
+  document.getElementById("detailEdit").onclick = () => {
+    closeDetailModal();
+    openEditForm(ev);
+  };
+  document.getElementById("detailDelete").onclick = () => {
+    state.editingId = ev.id;
+    openConfirmDelete();
+  };
+
+  document.getElementById("detailModal").classList.remove("hidden");
+}
+
+function addDetailRow(container, icon, text, muted) {
+  const row = document.createElement("div");
+  row.className = "ev-card-row";
+  const ic = document.createElement("div"); ic.className = "ev-card-icon"; ic.textContent = icon;
+  const tx = document.createElement("div"); tx.className = "ev-card-text" + (muted ? " muted" : ""); tx.textContent = text;
+  row.appendChild(ic); row.appendChild(tx);
+  container.appendChild(row);
+}
+
+function closeDetailModal() { document.getElementById("detailModal").classList.add("hidden"); }
+
+// openEventModal ahora abre la ficha si ya existe, o el formulario vacío si es nuevo
 function openEventModal(ev) {
+  openDetailModal(ev);
+}
+
+function openEditForm(ev) {
   state.editingId = ev.id;
   state.selectedCat = ev.category;
   resetForm();
@@ -755,7 +877,7 @@ function openEventModal(ev) {
   toggleTimeFields(!ev.allDay);
   renderCategoryPills(ev.category);
   document.getElementById("modalTitle").textContent = "Editar evento";
-  document.getElementById("deleteGroup").style.display = "block";
+  document.getElementById("deleteGroup").style.display = "none";
   document.getElementById("eventModal").classList.remove("hidden");
 }
 
@@ -810,7 +932,12 @@ function openConfirmDelete()  { document.getElementById("confirmModal").classLis
 function closeConfirmDelete() { document.getElementById("confirmModal").classList.add("hidden"); }
 async function confirmDeleteEvent() {
   if (!state.editingId) return;
-  try { await deleteEvent(state.editingId); closeConfirmDelete(); closeEventModal(); }
+  try {
+    await deleteEvent(state.editingId);
+    closeConfirmDelete();
+    closeDetailModal();
+    closeEventModal();
+  }
   catch(err) { alert("Error al borrar."); }
 }
 
@@ -922,7 +1049,9 @@ document.getElementById("catCancel").addEventListener("click", closeCatModal);
 document.getElementById("catSave").addEventListener("click", saveCat);
 document.getElementById("catDeleteBtn").addEventListener("click", deleteCat);
 
-["eventModal","confirmModal","dayModal","catModal"].forEach(id => {
+document.getElementById("detailClose").addEventListener("click", closeDetailModal);
+
+["eventModal","confirmModal","dayModal","catModal","detailModal"].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener("click", function(e) { if (e.target === this) this.classList.add("hidden"); });
 });
