@@ -490,6 +490,7 @@ function renderMonthly() {
 
 function renderMultidayBars(grid, allDates, cells, weeks) {
   const LANE_H = 16, LANE_GAP = 2, TOP_OFFSET = 24;
+  const COL = 100 / 7; // % del ancho de la fila por columna
   const multiday = state.events.filter(ev => isMultiDay(ev));
 
   for (let week = 0; week < weeks; week++) {
@@ -499,6 +500,11 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
     const rowFirst = rowDates[0];
     const rowLast  = rowDates[6];
 
+    // La celda ancla de toda la fila es siempre la primera (col 0)
+    const anchor = rowCells[0];
+    anchor.style.overflow = 'visible';
+    anchor.style.position = 'relative';
+
     const rowEvents = multiday.filter(ev =>
       ev.date <= rowLast && ev.endDate >= rowFirst
     );
@@ -506,7 +512,6 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
 
     rowEvents.sort((a, b) => a.date.localeCompare(b.date));
 
-    // lanes[i] = columna visEnd+1 hasta donde llega la barra en ese carril
     const lanes = [];
 
     rowEvents.forEach(ev => {
@@ -514,7 +519,6 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
       const visEnd   = ev.endDate > rowLast ? 6 : rowDates.indexOf(ev.endDate);
       if (visStart === -1 || visEnd === -1) return;
 
-      // Buscar carril libre
       let lane = lanes.findIndex(l => l <= visStart);
       if (lane === -1) lane = lanes.length;
       lanes[lane] = visEnd + 1;
@@ -525,14 +529,15 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
       const endsInRow   = ev.endDate <= rowLast;
       const spanCols    = visEnd - visStart + 1;
 
-      const anchor = rowCells[visStart];
-      anchor.style.overflow = 'visible';
-
       const bar = document.createElement("div");
       bar.className = "multiday-bar";
+      // left en % relativo al ancho total de la fila (anchor = col 0 = 1/7 del grid)
+      // Cada columna = 100% del anchor = 1/7 del grid, así que:
+      // left de visStart columnas = visStart * 100% del anchor
+      // width de spanCols columnas = spanCols * 100% del anchor
       bar.style.cssText = [
         `position:absolute`,
-        `left:1px`,
+        `left:calc(${visStart * 100}% + 1px)`,
         `width:calc(${spanCols * 100}% - 2px)`,
         `top:${TOP_OFFSET + lane * (LANE_H + LANE_GAP)}px`,
         `height:${LANE_H}px`,
@@ -555,7 +560,7 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
       bar.addEventListener("click", e => { e.stopPropagation(); openDetailModal(ev); });
       anchor.appendChild(bar);
 
-      // Ocultar pills individuales en celdas cubiertas por la barra
+      // Ocultar pills individuales en celdas cubiertas
       rowDates.forEach((d, ci) => {
         if (ci >= visStart && ci <= visEnd) {
           rowCells[ci].querySelectorAll(".event-pill").forEach(p => {
