@@ -953,13 +953,21 @@ document.getElementById("catDeleteBtn").addEventListener("click", deleteCat);
 });
 
 // ── Init ──
+let catsInitialized = false;
 subscribeCategories(cats => {
-  if (cats.length === 0) {
-    DEFAULT_CATS.forEach(c => addCategory(c));
-  } else {
-    state.categories = cats;
-    renderView();
+  state.categories = cats;
+  // Solo crear defaults si tras 1.5s Firestore sigue vacío (evita duplicados en carga inicial)
+  if (!catsInitialized) {
+    catsInitialized = true;
+    if (cats.length === 0) {
+      setTimeout(() => {
+        if (state.categories.length === 0) {
+          DEFAULT_CATS.forEach(c => addCategory(c));
+        }
+      }, 1500);
+    }
   }
+  renderView();
 });
 subscribeEvents(evs => {
   state.events = evs;
