@@ -458,14 +458,11 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
     const rowDates = allDates.slice(rowStart, rowStart + 7).map(d => d.dateStr);
     const rowCells = cells.slice(rowStart, rowStart + 7);
 
-    // Only events that genuinely overlap this row's date range
     const rowFirst = rowDates[0];
     const rowLast  = rowDates[6];
+
     const rowEvents = multiday.filter(ev =>
-      ev.date <= rowLast && ev.endDate >= rowFirst &&
-      // Extra guard: at least one of start/end must fall inside this row,
-      // OR the event must span entirely across it (start before, end after)
-      (ev.date >= rowFirst || ev.endDate <= rowLast || (ev.date < rowFirst && ev.endDate > rowLast))
+      ev.date <= rowLast && ev.endDate >= rowFirst
     );
 
     if (rowEvents.length === 0) continue;
@@ -474,29 +471,18 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
 
     const lanes = [];
     rowEvents.forEach(ev => {
-      // visStart: column index where bar starts in this row
-      let visStart;
-      if (ev.date < rowFirst) {
-        visStart = 0;
-      } else {
-        visStart = rowDates.indexOf(ev.date);
-        if (visStart === -1) return; // date not in this row, skip
-      }
+      // Calcular columna de inicio visible en esta fila
+      const visStart = ev.date < rowFirst ? 0 : rowDates.indexOf(ev.date);
+      // Calcular columna de fin visible en esta fila
+      const visEnd   = ev.endDate > rowLast ? 6 : rowDates.indexOf(ev.endDate);
 
-      // visEnd: column index where bar ends in this row
-      let visEnd;
-      if (ev.endDate > rowLast) {
-        visEnd = 6;
-      } else {
-        visEnd = rowDates.indexOf(ev.endDate);
-        if (visEnd === -1) return; // end date not in this row, skip
-      }
+      // Si alguno es -1, la fecha no está en esta fila → saltar
+      if (visStart === -1 || visEnd === -1) return;
 
       let lane = lanes.findIndex(l => l <= visStart);
       if (lane === -1) { lane = lanes.length; }
       lanes[lane] = visEnd + 1;
 
-      // Get pixel positions from cells
       const startCell = rowCells[visStart];
       const endCell   = rowCells[visEnd];
       if (!startCell || !endCell) return;
@@ -507,24 +493,22 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
 
       const cat   = getCat(ev.category);
       const color = cat ? cat.color : "#8E8E93";
-      const LANE_H = 14;
-      const LANE_GAP = 2;
-      const TOP_OFFSET = 22 + 4; // day number height + gap
+      const LANE_H = 14, LANE_GAP = 2, TOP_OFFSET = 22 + 4;
 
       const bar = document.createElement("div");
       bar.className = "multiday-bar";
+      const startsInRow = ev.date >= rowFirst;
+      const endsInRow   = ev.endDate <= rowLast;
       bar.style.cssText = `
         left:${startRect.left - gridRect.left + (visStart === 0 ? 0 : 1)}px;
         width:${endRect.right - startRect.left - (visStart === 0 ? 0 : 1) - 1}px;
         top:${TOP_OFFSET + lane * (LANE_H + LANE_GAP)}px;
         height:${LANE_H}px;
         background:${color};
-        border-radius:${ev.date >= rowDates[0] ? '4px' : '0'} ${ev.endDate <= rowDates[6] ? '4px' : '0'} ${ev.endDate <= rowDates[6] ? '4px' : '0'} ${ev.date >= rowDates[0] ? '4px' : '0'};
+        border-radius:${startsInRow ? '4px' : '0'} ${endsInRow ? '4px' : '0'} ${endsInRow ? '4px' : '0'} ${startsInRow ? '4px' : '0'};
       `;
 
-      // Show title only at start of bar (first visible day in row)
-      const showTitle = ev.date >= rowDates[0] ? true : visStart === 0;
-      if (showTitle) {
+      if (startsInRow || visStart === 0) {
         bar.textContent = ev.title;
       }
 
@@ -532,11 +516,9 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
       grid.style.position = "relative";
       grid.appendChild(bar);
 
-      // Hide the individual pills for this event in these cells (they are now replaced by the bar)
       rowDates.forEach((d, ci) => {
         if (ci >= visStart && ci <= visEnd) {
-          const cell = rowCells[ci];
-          cell.querySelectorAll(".event-pill").forEach(p => {
+          rowCells[ci].querySelectorAll(".event-pill").forEach(p => {
             if (p.dataset.evid === ev.id) p.style.display = "none";
           });
         }
@@ -544,7 +526,6 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
     });
   }
 }
-
 function buildDayCell(dateStr, isOther) {
   const cell = document.createElement("div");
   cell.className = "day-cell" + (isOther ? " other-month" : "") + (isTodayStr(dateStr) ? " today" : "");
@@ -1001,3 +982,4 @@ subscribeEvents(evs => {
 </script>
 </body>
 </html>
+
