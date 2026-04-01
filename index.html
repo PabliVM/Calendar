@@ -490,7 +490,8 @@ function renderMonthly() {
   );
   cells.forEach(c => grid.appendChild(c));
 
-  renderMultidayBars(grid, allDates, cells, weeks);
+  // rAF para que el layout esté calculado antes de leer offsetTop/offsetLeft
+  requestAnimationFrame(() => renderMultidayBars(grid, allDates, cells, weeks));
 }
 
 // Calcula cuántas barras multiday hay en cada celda (para desplazar las pills)
@@ -534,8 +535,19 @@ function calcMultidayLanes(allDates, weeks) {
 
 function renderMultidayBars(grid, allDates, cells, weeks) {
   const LANE_H = 16, LANE_GAP = 2, TOP_OFFSET = 24;
-  const COL = 100 / 7; // % del ancho de la fila por columna
   const multiday = state.events.filter(ev => isMultiDay(ev));
+
+  grid.style.position = 'relative';
+  // Limpiar barras anteriores
+  grid.querySelectorAll(".multiday-bar").forEach(b => b.remove());
+
+  // Pre-calcular top de cada fila usando la primera celda de cada semana
+  // Necesitamos forzar layout primero — usamos offsetTop que es síncrono
+  const rowTops = [];
+  for (let w = 0; w < weeks; w++) {
+    rowTops.push(cells[w * 7].offsetTop);
+  }
+  const gridW = grid.offsetWidth;
 
   for (let week = 0; week < weeks; week++) {
     const rowStart = week * 7;
@@ -544,18 +556,12 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
     const rowFirst = rowDates[0];
     const rowLast  = rowDates[6];
 
-    // La celda ancla de toda la fila es siempre la primera (col 0)
-    const anchor = rowCells[0];
-    anchor.style.overflow = 'visible';
-    anchor.style.position = 'relative';
-
     const rowEvents = multiday.filter(ev =>
       ev.date <= rowLast && ev.endDate >= rowFirst
     );
     if (rowEvents.length === 0) continue;
 
     rowEvents.sort((a, b) => a.date.localeCompare(b.date));
-
     const lanes = [];
 
     rowEvents.forEach(ev => {
@@ -573,17 +579,18 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
       const endsInRow   = ev.endDate <= rowLast;
       const spanCols    = visEnd - visStart + 1;
 
+      // Posición usando offsetLeft/offsetTop — síncrono y fiable en todos los navegadores
+      const leftPx = cells[rowStart + visStart].offsetLeft + 1;
+      const widthPx = (gridW / 7) * spanCols - 2;
+      const topPx  = rowTops[week] + TOP_OFFSET + lane * (LANE_H + LANE_GAP);
+
       const bar = document.createElement("div");
       bar.className = "multiday-bar";
-      // left en % relativo al ancho total de la fila (anchor = col 0 = 1/7 del grid)
-      // Cada columna = 100% del anchor = 1/7 del grid, así que:
-      // left de visStart columnas = visStart * 100% del anchor
-      // width de spanCols columnas = spanCols * 100% del anchor
       bar.style.cssText = [
         `position:absolute`,
-        `left:calc(${visStart * 100}% + 1px)`,
-        `width:calc(${spanCols * 100}% - 2px)`,
-        `top:${TOP_OFFSET + lane * (LANE_H + LANE_GAP)}px`,
+        `left:${leftPx}px`,
+        `width:${widthPx}px`,
+        `top:${topPx}px`,
         `height:${LANE_H}px`,
         `background:${color}`,
         `border-radius:${startsInRow?'4px':'0'} ${endsInRow?'4px':'0'} ${endsInRow?'4px':'0'} ${startsInRow?'4px':'0'}`,
@@ -602,7 +609,7 @@ function renderMultidayBars(grid, allDates, cells, weeks) {
 
       if (startsInRow || visStart === 0) bar.textContent = ev.title;
       bar.addEventListener("click", e => { e.stopPropagation(); openDetailModal(ev); });
-      anchor.appendChild(bar);
+      grid.appendChild(bar);
 
       // Ocultar pills individuales en celdas cubiertas
       rowDates.forEach((d, ci) => {
