@@ -683,7 +683,7 @@ function buildPill(ev, warn, dateStr) {
   pill.className = "event-pill" + (role !== "single" ? " multiday-" + role : "");
   pill.style.background = cat ? cat.color : "#8E8E93";
 
-  const showDot = role === "single" || role === "start";
+  const showDot = false;
   if (showDot) { const dot = document.createElement("span"); dot.className = "pill-dot"; pill.appendChild(dot); }
   if (warn) { const w = document.createElement("span"); w.className = "pill-warn"; w.textContent = "⚠️"; pill.appendChild(w); }
   const txt = document.createElement("span"); txt.className = "event-pill-text";
