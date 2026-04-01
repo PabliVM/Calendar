@@ -55,8 +55,8 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
 .day-cell.other-month .day-number{color:var(--text3)}
 .day-cell.today .day-number{background:var(--accent);color:white;border-radius:50%;min-width:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:600;padding:0}
 .day-number{font-size:12px;font-weight:500;color:var(--text);line-height:1;margin-bottom:3px;display:flex;align-items:center;justify-content:center;min-width:22px;width:auto;height:22px;padding:0 3px}
-.day-events{display:flex;flex-direction:column;gap:1.5px;overflow:hidden}
-.event-pill{display:flex;align-items:center;gap:3px;padding:1.5px 4px;border-radius:4px;font-size:9.5px;font-weight:500;line-height:1.3;color:white;white-space:nowrap;overflow:hidden;cursor:pointer;position:relative;z-index:1;width:100%}
+.day-events{position:absolute;left:2px;right:2px;display:flex;flex-direction:column;gap:1.5px;overflow:hidden}
+.event-pill{display:flex;align-items:center;gap:3px;padding:1.5px 4px;border-radius:4px;font-size:9.5px;font-weight:500;line-height:1.3;color:white;white-space:nowrap;overflow:hidden;cursor:pointer;position:relative;z-index:1;width:100%;min-width:0;box-sizing:border-box}
 .event-pill-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
 .event-pill.multiday-start{border-radius:4px 0 0 4px}
 .event-pill.multiday-mid{border-radius:0;padding-left:2px;padding-right:2px}
@@ -637,11 +637,10 @@ function buildDayCell(dateStr, isOther, multidayCount) {
   const ec = document.createElement("div");
   ec.className = "day-events";
 
-  // Desplazar pills hacia abajo si hay barras multiday ocupando espacio
-  if (multidayCount > 0) {
-    const pillsTop = TOP_OFFSET + multidayCount * (LANE_H + LANE_GAP);
-    ec.style.marginTop = `${pillsTop - 22}px`; // 22 = altura del número del día
-  }
+  // Posicionar pills debajo del número del día, empujando si hay barras multiday
+  const pillsTopPx = 26 + (multidayCount > 0 ? multidayCount * (LANE_H + LANE_GAP) : 0);
+  ec.style.top = `${pillsTopPx}px`;
+  ec.style.bottom = '4px';
 
   // Solo mostrar eventos que NO son multiday (los multiday ya tienen su barra)
   const singleEvts = sorted.filter(ev => !isMultiDay(ev));
