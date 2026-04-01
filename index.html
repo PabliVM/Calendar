@@ -47,8 +47,8 @@ body{height:100%;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom,20p
 .hidden{display:none!important}
 
 /* Monthly grid */
-.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:0;padding:0 0 80px;border-top:.5px solid var(--sep)}
-.day-cell{height:110px;min-height:110px;max-height:110px;padding:6px 4px 4px;border-right:.5px solid var(--sep);border-bottom:.5px solid var(--sep);position:relative;cursor:pointer;background:var(--surface);overflow:visible}
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:110px;gap:0;padding:0 0 80px;border-top:.5px solid var(--sep)}
+.day-cell{padding:6px 4px 4px;border-right:.5px solid var(--sep);border-bottom:.5px solid var(--sep);position:relative;cursor:pointer;background:var(--surface);overflow:visible}
 .day-cell:active{background:var(--surface2)}
 .day-cell:nth-child(7n){border-right:none}
 .day-cell.other-month{background:#FAFAFA}
